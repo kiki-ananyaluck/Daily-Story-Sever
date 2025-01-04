@@ -1,0 +1,5 @@
+{
+  "connectionString": "mongodb://kikiananyaluck:QeE4coGSnueyXRNS@dailystory-shard-00-00.ri8ay.mongodb.net:27017,dailystory-shard-00-01.ri8ay.mongodb.net:27017,dailystory-shard-00-02.ri8ay.mongodb.net:27017/?ssl=true&replicaSet=atlas-8wp3pp-shard-0&authSource=admin&retryWrites=true&w=majority&appName=dailystory"
+}
+
+
