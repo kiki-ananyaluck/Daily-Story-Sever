@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const config = require("./config.json");
 const mongoose = require("mongoose");
-const bcrypt = require("bcrypt");
+const bcryptjs = require("bcryptjs");
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
@@ -14,13 +14,16 @@ const User = require("./models/user.model");
 const DailyStory = require("./models/dailyStory.model");
 const { authenticateToken } = require("./utilities");
 
+const baseUrl = process.env.BASE_URL;
+const uploadsPath = process.env.UPLOADS_PATH;
+const assetsPath = process.env.ASSETS_PATH;
+
 mongoose.connect(config.connectionString);
 
 
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: "*" }));
-
 
 
 app.post("/create-account", async (req, res) => {
@@ -39,7 +42,7 @@ app.post("/create-account", async (req, res) => {
       .json({ error: true, message: "User already exists" })
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10)
+  const hashedPassword = await bcryptjs.hash(password, 10)
 
   const user = new User({
     fullName,
@@ -82,7 +85,7 @@ app.get("/login", async (req, res) => {
       .status(400).json({ message: "User not found" });
   }
 
-  const isPasswordValidate = await bcrypt.compare(password, user.password);
+  const isPasswordValidate = await bcryptjs.compare(password, user.password);
   if (!isPasswordValidate) {
     return res
       .status(400).json({ message: "Invalid Credentials" })
@@ -166,7 +169,8 @@ app.post("/image-upload", upload.single("image"), async (req, res) => {
         .status(400)
         .json({ error: true, message: "No image uploaded" })
     }
-    const imageUrl = `http://localhost:8000/${req.file.filename}`;
+
+    const imageUrl = `${baseUrl}/${uploadsPath}/${req.file.filename}`;
 
     res.status(201).json({ imageUrl });
   } catch (error) {
@@ -174,6 +178,119 @@ app.post("/image-upload", upload.single("image"), async (req, res) => {
   }
 })
 
+app.delete("/delete-image", async (req, res) => {
+  const { imageUrl } = req.query;
+
+  if (!imageUrl) {
+    return res
+      .status(400)
+      .json({ error: true, message: "imageUrl parameter is required" })
+  }
+
+  try {
+    const filename = path.basename(imageUrl);
+    const filePath = path.join(__dirname, 'uploads', filename);
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      res.status(200).json({ message: "Image deleted successfully" });
+    } else {
+      res.status(200).json({ error: true, message: "Image not found" });
+    }
+  } catch (error) {
+    res.status(500).json({ error: true, message: error.message })
+  }
+
+})
+
+app.post("/edit-story/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { title, story, visitedLocation, imageUrl, visitedDate } = req.body;
+  const { userId } = req.user;
+
+  if (!title || !story || !visitedLocation || !imageUrl || !visitedDate) {
+    return res.
+      status(400).json({ error: true, message: "All field are required" })
+  }
+
+  const parsedVisitedDate = new Date(parseInt(visitedDate));
+
+  try {
+    const dailyStory = await DailyStory.findOne({ _id: id, userId: userId });
+
+    if (!dailyStory) {
+      return res.status(404).json({ error: true, message: "Daily story not found" });
+    }
+    const placeholderImgUrl = `${baseUrl}/${assetsPath}/placeholder.jpg`
+
+    dailyStory.title = title;
+    dailyStory.story = story;
+    dailyStory.visitedLocation = visitedLocation;
+    dailyStory.imageUrl = imageUrl || placeholderImgUrl;
+    dailyStory.visitedDate = parsedVisitedDate;
+
+    await dailyStory.save();
+    res.status(200).json({ story: dailyStory, message: 'Update Successful' })
+  } catch (error) {
+    res.status(500).json({ error: true, message: error.message })
+  }
+});
+
+app.delete("/delete-story/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.user;
+
+  try {
+    const dailyStory = await DailyStory.findOne({ _id: id, userId: userId });
+
+    if (!dailyStory) {
+      return res.status(404).json({ error: true, message: "Daily story not found" });
+    }
+
+    await dailyStory.deleteOne({ _id: id, userId: userId });
+
+    const imageUrl = dailyStory.imageUrl;
+    const filename = path.basename(imageUrl);
+
+    const filePath = path.join(__dirname, 'uploads', filename);
+
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        console.error("failed to delete image file:", err)
+      }
+    })
+
+    res.status(200).json({ message: "Travel story deleted successfully" })
+
+  } catch (error) {
+    res.status(500).json({ error: true, message: error.message })
+  }
+})
+
+app.post("/update-is-favourite/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.user;
+  const { isFavourite } = req.body;
+
+  try {
+    const dailyStory = await DailyStory.findOne({_id: id, userId: userId})
+    
+    if (!dailyStory) {
+      return res.status(404).json({ error: true, message: "Daily story not found" });
+    }
+    
+    dailyStory.isFavourite = isFavourite;
+    await dailyStory.save();
+
+    res.status(200).json({ story: dailyStory, message: 'Update Successful' })
+  } catch (error) {
+    res.status(500).json({ error: true, message: error.message })
+  }
+})
+
+//Sever static file from the uploads and assets directory
+app.use("/uploads", express.static(path.join(__dirname, "uploads")))
+app.use("/assets", express.static(path.join(__dirname, "assets")))
 
 app.listen(8000);
 module.exports = app;
