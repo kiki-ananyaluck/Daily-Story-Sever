@@ -301,17 +301,38 @@ app.get("/search", authenticateToken, async (req, res) => {
     const searchResults = await DailyStory.find({
       userId: userId,
       $or: [
-        {title: { $regex: query, $options: "i"}},
-        {story: {$regex: query, $options: "i"}},
-        {visitedLocation: {$regex: query, $options: "i"}}
+        { title: { $regex: query, $options: "i" } },
+        { story: { $regex: query, $options: "i" } },
+        { visitedLocation: { $regex: query, $options: "i" } }
       ],
-    }).sort({isFavourite: -1});
+    }).sort({ isFavourite: -1 });
 
-    res.status(200).json({stories: searchResults})
+    res.status(200).json({ stories: searchResults })
   } catch (error) {
     res.status(500).json({ error: true, message: error.message });
   }
 })
+
+app.get("/daily-story/filter", authenticateToken, async (req, res) => {
+  const { startDate, endDate } = req.query;
+  const { userId } = req.user;
+
+  try {
+    const start = new Date(parseInt(startDate));
+    const end = new Date(parseInt(endDate));
+
+    const filteredStories = await DailyStory.find({
+      userId: userId,
+      visitedDate: { $gte: start, $lte: end }
+    }).sort({ isFavourite: -1 });
+
+    res.status(200).json({ stories: filteredStories })
+    
+  } catch (error) {
+    res.status(500).json({ error: true, message: error.message });
+  }
+})
+
 
 //Sever static file from the uploads and assets directory
 app.use("/uploads", express.static(path.join(__dirname, "uploads")))
