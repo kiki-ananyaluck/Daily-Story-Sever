@@ -273,18 +273,43 @@ app.post("/update-is-favourite/:id", authenticateToken, async (req, res) => {
   const { isFavourite } = req.body;
 
   try {
-    const dailyStory = await DailyStory.findOne({_id: id, userId: userId})
-    
+    const dailyStory = await DailyStory.findOne({ _id: id, userId: userId })
+
     if (!dailyStory) {
       return res.status(404).json({ error: true, message: "Daily story not found" });
     }
-    
+
     dailyStory.isFavourite = isFavourite;
     await dailyStory.save();
 
     res.status(200).json({ story: dailyStory, message: 'Update Successful' })
   } catch (error) {
     res.status(500).json({ error: true, message: error.message })
+  }
+})
+
+app.get("/search", authenticateToken, async (req, res) => {
+  const { query } = req.query;
+  const { userId } = req.user;
+
+  if (!query) {
+    return res
+      .status(404).json({ error: true, message: "query is required" })
+  }
+
+  try {
+    const searchResults = await DailyStory.find({
+      userId: userId,
+      $or: [
+        {title: { $regex: query, $options: "i"}},
+        {story: {$regex: query, $options: "i"}},
+        {visitedLocation: {$regex: query, $options: "i"}}
+      ],
+    }).sort({isFavourite: -1});
+
+    res.status(200).json({stories: searchResults})
+  } catch (error) {
+    res.status(500).json({ error: true, message: error.message });
   }
 })
 
